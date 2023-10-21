@@ -21,10 +21,10 @@ impl SVG {
         let mut file = File::create(path)?;
         file.write_all(b"<svg version=\"1.1\"\n")?;
         file.write_all(b"     width=\"1024\" height=\"1024\"\n")?;
-        file.write_all(b"     xmlns=\"http://www.w3.org/2000/svg\"\n")?;
+        file.write_all(b"     xmlns=\"http://www.w3.org/2000/svg\"")?;
         let view_str = self.view_str();
         if view_str.len() > 0 {
-            file.write_all(b"\n     ")?;
+            file.write_all(b"\n    ")?;
             file.write_all(&view_str.as_bytes())?;
         }
         file.write_all(b">\n")?;
