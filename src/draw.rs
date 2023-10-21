@@ -1,6 +1,7 @@
+use euclid::approxord::max;
 use std::fs::File;
 use std::io::{Result, Write};
-use euclid::default::{Box2D, Point2D};
+use euclid::default::{Box2D, Point2D, Vector2D};
 use euclid::Size2D;
 
 pub struct SVG {
@@ -73,6 +74,33 @@ impl SVG {
         println!("Box {:?}", self.size);
         self.lines.push(
             format!("  <circle cx=\"{}\" cy=\"{}\" r=\"2\"/>", pt.x, pt.y)
+        )
+    }
+
+    pub fn draw_line(&mut self, start : &Point2D<f64>, end : &Point2D<f64>, colour : &str) {
+        self.expand_size(start);
+        self.expand_size(end);
+        println!("Box {:?}", self.size);
+        self.lines.push(
+            format!(
+                "  <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" />",
+                start.x, start.y, end.x, end.y, colour
+            )
+        )
+    }
+
+    pub fn draw_ray(&mut self, start : &Point2D<f64>, dir : &Vector2D<f64>, colour : &str) {
+        self.expand_size(start);
+        println!("Box {:?}", self.size);
+        let dist = 2.0 * self.size.map(
+            |b| max(b.height(), b.width())
+        ).unwrap_or(5.0);
+        let end = *start + (dir.normalize() * dist);
+        self.lines.push(
+            format!(
+                "  <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" />",
+                start.x, start.y, end.x, end.y, colour
+            )
         )
     }
 }
