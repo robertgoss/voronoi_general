@@ -3,6 +3,7 @@ use std::fs;
 
 mod voronoi_points_2d;
 mod draw;
+mod scenario;
 
 fn main() {
     let in_path = env::args().nth(1).unwrap_or("input.json".to_string());
@@ -15,11 +16,7 @@ fn main() {
         &format!("Could not parse {}", &in_path)
     );
     println!("Parsed {}", &in_path);
-    let scenario = input["scenario"].as_str().expect("Missing scenario key");
-    if scenario != "voronoi_points_2d" {
-        println!("Unknown scenario {}", scenario);
-    }
-    let voronoi = voronoi_points_2d::VoronoiGraph::from_json(&input).expect(
+    let voronoi = scenario::make_scenario(&input).expect(
         "Could not load / calculate"
     );
     voronoi.draw(&mut out_file);
