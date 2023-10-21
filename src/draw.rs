@@ -69,29 +69,31 @@ impl SVG {
         }
     }
 
-    pub fn draw_point(&mut self, pt : &Point2D<f64>) {
+    pub fn draw_point(&mut self, pt : &Point2D<f64>, colour : &str) {
         self.expand_size(pt);
-        println!("Box {:?}", self.size);
         self.lines.push(
-            format!("  <circle cx=\"{}\" cy=\"{}\" r=\"2\"/>", pt.x, pt.y)
+            format!(
+                "  <circle cx=\"{}\" cy=\"{}\" r=\"2\" stroke=\"{}\" fill=\"{}\"/>",
+                pt.x, pt.y, colour, colour
+            )
         )
     }
 
     pub fn draw_line(&mut self, start : &Point2D<f64>, end : &Point2D<f64>, colour : &str) {
         self.expand_size(start);
         self.expand_size(end);
-        println!("Box {:?}", self.size);
         self.lines.push(
             format!(
                 "  <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" />",
                 start.x, start.y, end.x, end.y, colour
             )
-        )
+        );
+        self.draw_point(start, colour);
+        self.draw_point(end, colour);
     }
 
     pub fn draw_ray(&mut self, start : &Point2D<f64>, dir : &Vector2D<f64>, colour : &str) {
         self.expand_size(start);
-        println!("Box {:?}", self.size);
         let dist = 2.0 * self.size.map(
             |b| max(b.height(), b.width())
         ).unwrap_or(5.0);
@@ -101,6 +103,7 @@ impl SVG {
                 "  <line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"{}\" />",
                 start.x, start.y, end.x, end.y, colour
             )
-        )
+        );
+        self.draw_point(start, colour);
     }
 }

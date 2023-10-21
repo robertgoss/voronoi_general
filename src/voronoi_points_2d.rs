@@ -4,11 +4,16 @@ use euclid::{point2, vec2};
 use json::JsonValue;
 use crate::draw::SVG;
 
+type UnitVector2D<S> = Vector2D<S>;
+
+type PointId = u32;
+
 #[derive(Clone)]
 struct VoronoiEdge {
     point : Point2D<f64>,
-    dir : Vector2D<f64>,
+    dir : UnitVector2D<f64>,
     min_dist : f64,
+    points : [PointId; 2],
     min_t : Option<f64>,
     max_t : Option<f64>
 }
@@ -51,6 +56,7 @@ impl VoronoiGraph {
         }
     }
     fn add_source_point(&mut self, point : Point2D<f64>) {
+        let new_id = self.source_points.len() as PointId;
         // Trim existing
         self.edges.retain_mut(
             |edge| match edge.trim(&point) {
@@ -63,10 +69,15 @@ impl VoronoiGraph {
             }
         );
         // Add new edges
-        for pt in &self.source_points {
-            let mut edge = VoronoiEdge::two_points(pt, &point);
-            if let Some(edge) = edge.trim_points(&self.source_points) {
-                self.edges.push(edge);
+        for (id, pt) in self.source_points.iter().enumerate() {
+            let edge = VoronoiEdge::two_points(
+                pt,
+                &point,
+                id as PointId,
+                new_id
+            );
+            if let Some(trimmed_edge) = edge.trim_points(&self.source_points) {
+                self.edges.push(trimmed_edge);
             }
         }
         // Add the point
@@ -75,7 +86,7 @@ impl VoronoiGraph {
 
     pub fn draw(&self, output : &mut SVG) {
         for pt in &self.source_points {
-            output.draw_point(&pt)
+            output.draw_point(&pt, "black")
         }
         for edge in &self.edges {
             edge.draw(output)
@@ -85,11 +96,12 @@ impl VoronoiGraph {
 
 
 impl VoronoiEdge {
-    fn two_points(pt1 : &Point2D<f64>, pt2 : &Point2D<f64>) -> VoronoiEdge {
-        let dir : Vector2D<f64> = *pt2 - *pt1;
+    fn two_points(pt1 : &Point2D<f64>, pt2 : &Point2D<f64>, id1 : PointId, id2 : PointId) -> VoronoiEdge {
+        let dir : Vector2D<f64> = (*pt2 - *pt1).normalize();
         VoronoiEdge {
             point: pt1.lerp(*pt2, 0.5),
             dir: vec2(dir.y, -dir.x),
+            points : [id1, id2],
             min_dist: pt1.distance_to(*pt2) * 0.5,
             min_t: None,
             max_t: None,
@@ -98,7 +110,11 @@ impl VoronoiEdge {
 
     fn trim_points(&self, points : &Vec<Point2D<f64>>) -> Option<VoronoiEdge> {
         let mut trimmed = Some(self.clone());
-        for point in points {
+        for (index, point) in points.iter().enumerate() {
+            let id = index as PointId;
+            if self.points[0] == id || self.points[1] == id {
+                continue
+            }
             if let Some(edge) = &trimmed {
                 match edge.trim(&point) {
                     TrimmedEdge::Keep => {},
@@ -115,7 +131,59 @@ impl VoronoiEdge {
     }
 
     fn trim(&self, point : &Point2D<f64>) -> TrimmedEdge {
-        TrimmedEdge::Keep
+        let diff = *point - self.point;
+        let t_nearest = self.dir.dot(diff);
+        let t_nearest_sq = t_nearest * t_nearest;
+        let perp_dir = vec2(self.dir.y, -self.dir.x);
+        let d_nearest = perp_dir.dot(diff);
+        let d_nearest_sq = d_nearest * d_nearest;
+        let min_dist_sq = self.min_dist * self.min_dist;
+        let cut_t = (t_nearest_sq + d_nearest_sq - min_dist_sq) / (2.0*t_nearest);
+        if t_nearest > 0.0 {
+            self.cut_max(cut_t)
+        } else {
+            self.cut_min(cut_t)
+        }
+    }
+
+    fn cut_max(&self, t : f64) -> TrimmedEdge {
+        if t > 0.0 {
+            if let Some(max_t) = self.max_t {
+                if max_t <= t {
+                    TrimmedEdge::Keep
+                } else {
+                    let mut edge = self.clone();
+                    edge.max_t = Some(t);
+                    TrimmedEdge::Trimmed(edge)
+                }
+            } else {
+                let mut edge = self.clone();
+                edge.max_t = Some(t);
+                TrimmedEdge::Trimmed(edge)
+            }
+        } else {
+            TrimmedEdge::Filter
+        }
+    }
+
+    fn cut_min(&self, t : f64) -> TrimmedEdge {
+        if t < 0.0 {
+            if let Some(min_t) = self.min_t {
+                if min_t >= t {
+                    TrimmedEdge::Keep
+                } else {
+                    let mut edge = self.clone();
+                    edge.min_t = Some(t);
+                    TrimmedEdge::Trimmed(edge)
+                }
+            } else {
+                let mut edge = self.clone();
+                edge.min_t = Some(t);
+                TrimmedEdge::Trimmed(edge)
+            }
+        } else {
+            TrimmedEdge::Filter
+        }
     }
 
 
