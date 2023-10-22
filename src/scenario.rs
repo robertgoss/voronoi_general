@@ -40,8 +40,8 @@ fn random_from_json(input: &JsonValue) -> Option<VoronoiGraph> {
     for _ in 0..num {
         let i : i32 = rng.gen();
         let j : i32 = rng.gen();
-        let x = (i % 100);
-        let y = (j % 100);
+        let x = i % 100;
+        let y = j % 100;
         graph.add_source_point(point2(x, y));
     }
     Some(graph)

@@ -1,5 +1,5 @@
 use euclid::default::*;
-use euclid::{point2, vec2};
+use euclid::vec2;
 use crate::draw::SVG;
 use num_rational::Ratio;
 
@@ -78,7 +78,7 @@ impl VoronoiGraph {
 
 impl VoronoiEdge {
     fn two_points(pt1: &Point2D<i32>, pt2: &Point2D<i32>, id1: PointId, id2: PointId) -> VoronoiEdge {
-        let dir: Vector2D<i32> = (*pt2 - *pt1);
+        let dir: Vector2D<i32> = *pt2 - *pt1;
         VoronoiEdge {
             double_point: *pt1 + pt2.to_vector(),
             mul_dir: vec2(dir.y, -dir.x),
@@ -128,7 +128,7 @@ impl VoronoiEdge {
         }
         let cut_t = Ratio::new(
             t_nearest_sq + d_nearest_sq - min_dist_quart,
-            4 * t_nearest
+            4 * t_nearest * min_dist_sq
         );
         if t_nearest > 0 {
             self.cut_max(cut_t)
@@ -205,6 +205,64 @@ impl VoronoiEdge {
                 let inv_norm_dir = -norm_dir;
                 output.draw_ray(&point, &inv_norm_dir, "red");
             }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use euclid::point2;
+    use super::*;
+
+    #[test]
+    fn test_basic_trim() {
+        let p1 : Point2D<i32> = point2(-10, 0);
+        let p2 : Point2D<i32> = point2(0, 0);
+        let p3 : Point2D<i32> = point2(5, 5);
+
+        // Test the 3 possible lines trimmed against the third point are correct
+        let e12 = VoronoiEdge::two_points(&p1, &p2, 1, 2);
+        let tr12 = e12.trim(&p3);
+        if let TrimmedEdge::Trimmed(te12) = tr12 {
+            assert!(te12.min_t.is_some());
+            assert!(te12.max_t.is_none());
+            let v = te12.min_t.unwrap();
+            assert_eq!(v, Ratio::new(-1,1));
+        } else {
+            // Should have trimmed
+            assert!(false);
+        }
+        let e13 = VoronoiEdge::two_points(&p1, &p3, 1, 3);
+        let tr13 = e13.trim(&p2);
+        if let TrimmedEdge::Trimmed(te13) = tr13 {
+            assert!(te13.min_t.is_none());
+            assert!(te13.max_t.is_some());
+            let v = te13.max_t.unwrap();
+            assert_eq!(v, Ratio::new(-1,2));
+        } else {
+            // Should have trimmed
+            assert!(false);
+        }
+        let e23 = VoronoiEdge::two_points(&p2, &p3, 2, 3);
+        let tr23 = e23.trim(&p1);
+        if let TrimmedEdge::Trimmed(te23) = tr23 {
+            assert!(te23.min_t.is_some());
+            assert!(te23.max_t.is_none());
+            let v = te23.min_t.unwrap();
+            assert_eq!(v, Ratio::new(-3,2));
+        } else {
+            // Should have trimmed
+            assert!(false);
         }
     }
 }
