@@ -1,19 +1,21 @@
 use euclid::default::*;
-use euclid::{vec2};
+use euclid::{point2, vec2};
 use crate::draw::SVG;
-
-type UnitVector2D<S> = Vector2D<S>;
+use num_rational::Ratio;
 
 type PointId = u32;
 
+fn int_dot(v1 : Vector2D<i32>, v2 : Vector2D<i32>) -> i64 {
+    (v1.x as i64 * v2.x as i64) + (v1.y as i64 * v2.y as i64)
+}
+
 #[derive(Clone)]
 struct VoronoiEdge {
-    point : Point2D<f64>,
-    dir : UnitVector2D<f64>,
-    min_dist : f64,
+    double_point : Point2D<i32>,
+    mul_dir : Vector2D<i32>,
     points : [PointId; 2],
-    min_t : Option<f64>,
-    max_t : Option<f64>
+    min_t : Option<Ratio<i64>>,
+    max_t : Option<Ratio<i64>>
 }
 
 enum TrimmedEdge {
@@ -23,7 +25,7 @@ enum TrimmedEdge {
 }
 
 pub struct VoronoiGraph {
-    source_points : Vec<Point2D<f64>>,
+    source_points : Vec<Point2D<i32>>,
     edges : Vec<VoronoiEdge>
 }
 
@@ -34,7 +36,7 @@ impl VoronoiGraph {
             edges : Vec::new()
         }
     }
-    pub fn add_source_point(&mut self, point : Point2D<f64>) {
+    pub fn add_source_point(&mut self, point : Point2D<i32>) {
         let new_id = self.source_points.len() as PointId;
         // Trim existing
         self.edges.retain_mut(
@@ -65,7 +67,7 @@ impl VoronoiGraph {
 
     pub fn draw(&self, output : &mut SVG) {
         for pt in &self.source_points {
-            output.draw_point(&pt, "black")
+            output.draw_point(&pt.cast::<f64>(), "black")
         }
         for edge in &self.edges {
             edge.draw(output)
@@ -75,19 +77,18 @@ impl VoronoiGraph {
 
 
 impl VoronoiEdge {
-    fn two_points(pt1: &Point2D<f64>, pt2: &Point2D<f64>, id1: PointId, id2: PointId) -> VoronoiEdge {
-        let dir: Vector2D<f64> = (*pt2 - *pt1).normalize();
+    fn two_points(pt1: &Point2D<i32>, pt2: &Point2D<i32>, id1: PointId, id2: PointId) -> VoronoiEdge {
+        let dir: Vector2D<i32> = (*pt2 - *pt1);
         VoronoiEdge {
-            point: pt1.lerp(*pt2, 0.5),
-            dir: vec2(dir.y, -dir.x),
+            double_point: *pt1 + pt2.to_vector(),
+            mul_dir: vec2(dir.y, -dir.x),
             points: [id1, id2],
-            min_dist: pt1.distance_to(*pt2) * 0.5,
             min_t: None,
             max_t: None,
         }
     }
 
-    fn trim_points(&self, points: &Vec<Point2D<f64>>) -> Option<VoronoiEdge> {
+    fn trim_points(&self, points: &Vec<Point2D<i32>>) -> Option<VoronoiEdge> {
         let mut trimmed = Some(self.clone());
         for (index, point) in points.iter().enumerate() {
             let id = index as PointId;
@@ -109,23 +110,34 @@ impl VoronoiEdge {
         trimmed
     }
 
-    fn trim(&self, point: &Point2D<f64>) -> TrimmedEdge {
-        let diff = *point - self.point;
-        let t_nearest = self.dir.dot(diff);
+    fn trim(&self, point: &Point2D<i32>) -> TrimmedEdge {
+        let diff = (*point * 2) - self.double_point;
+        let t_nearest = int_dot(self.mul_dir, diff);
         let t_nearest_sq = t_nearest * t_nearest;
-        let perp_dir = vec2(self.dir.y, -self.dir.x);
-        let d_nearest = perp_dir.dot(diff);
+        let mul_perp_dir = vec2(self.mul_dir.y, -self.mul_dir.x);
+        let d_nearest = int_dot(mul_perp_dir,diff);
         let d_nearest_sq = d_nearest * d_nearest;
-        let min_dist_sq = self.min_dist * self.min_dist;
-        let cut_t = (t_nearest_sq + d_nearest_sq - min_dist_sq) / (2.0 * t_nearest);
-        if t_nearest > 0.0 {
+        let min_dist_sq = int_dot(self.mul_dir,self.mul_dir);
+        let min_dist_quart = min_dist_sq * min_dist_sq;
+        if t_nearest == 0 {
+            if d_nearest_sq > min_dist_sq {
+                return TrimmedEdge::Keep
+            } else {
+                return TrimmedEdge::Filter
+            }
+        }
+        let cut_t = Ratio::new(
+            t_nearest_sq + d_nearest_sq - min_dist_quart,
+            4 * t_nearest
+        );
+        if t_nearest > 0 {
             self.cut_max(cut_t)
         } else {
             self.cut_min(cut_t)
         }
     }
 
-    fn cut_max(&self, t: f64) -> TrimmedEdge {
+    fn cut_max(&self, t: Ratio<i64>) -> TrimmedEdge {
         if let Some(min_t) = self.min_t {
             if t <= min_t {
                 return TrimmedEdge::Filter
@@ -141,7 +153,7 @@ impl VoronoiEdge {
         TrimmedEdge::Trimmed(edge)
     }
 
-    fn cut_min(&self, t: f64) -> TrimmedEdge {
+    fn cut_min(&self, t: Ratio<i64>) -> TrimmedEdge {
         if let Some(max_t) = self.max_t {
             if t >= max_t {
                 return TrimmedEdge::Filter
@@ -159,32 +171,39 @@ impl VoronoiEdge {
 
 
     fn start(&self) -> Option<Point2D<f64>> {
+        let point = self.double_point.cast::<f64>() * 0.5;
+        let dir = self.mul_dir.cast::<f64>();
         self.min_t.map(
-            |t| self.point + (self.dir * t)
+            |t| point + (dir * (*t.numer() as f64 / *t.denom() as f64))
         )
     }
 
     fn end(&self) -> Option<Point2D<f64>> {
+        let point = self.double_point.cast::<f64>() * 0.5;
+        let dir = self.mul_dir.cast::<f64>();
         self.max_t.map(
-            |t| self.point + (self.dir * t)
+            |t| point + (dir * (*t.numer() as f64 / *t.denom() as f64))
         )
     }
 
     fn draw(&self, output: &mut SVG) {
+        let dir = self.mul_dir.cast::<f64>();
+        let norm_dir = dir.normalize();
         if let Some(start) = self.start() {
             if let Some(end) = self.end() {
                 output.draw_line(&start, &end, "red");
             } else {
-                output.draw_ray(&start, &self.dir, "red");
+                output.draw_ray(&start, &norm_dir, "red");
             }
         } else {
             if let Some(end) = self.end() {
-                let dir = -self.dir;
-                output.draw_ray(&end, &dir, "red");
+                let inv_norm_dir = -norm_dir;
+                output.draw_ray(&end, &inv_norm_dir, "red");
             } else {
-                output.draw_ray(&self.point, &self.dir, "red");
-                let dir = -self.dir;
-                output.draw_ray(&self.point, &dir, "red");
+                let point = self.double_point.cast::<f64>() * 0.5;
+                output.draw_ray(&point, &norm_dir, "red");
+                let inv_norm_dir = -norm_dir;
+                output.draw_ray(&point, &inv_norm_dir, "red");
             }
         }
     }

@@ -24,8 +24,8 @@ fn points_from_json(input: &JsonValue) -> Option<VoronoiGraph> {
             return None
         }
         let pt = point2(
-            point[0].as_f64().unwrap_or(0.0),
-            point[1].as_f64().unwrap_or(0.0)
+            point[0].as_i32().unwrap_or(0),
+            point[1].as_i32().unwrap_or(0)
         );
         graph.add_source_point(pt);
     }
@@ -40,8 +40,8 @@ fn random_from_json(input: &JsonValue) -> Option<VoronoiGraph> {
     for _ in 0..num {
         let i : i32 = rng.gen();
         let j : i32 = rng.gen();
-        let x = (i % 100) as f64;
-        let y = (j % 100) as f64;
+        let x = (i % 100);
+        let y = (j % 100);
         graph.add_source_point(point2(x, y));
     }
     Some(graph)
